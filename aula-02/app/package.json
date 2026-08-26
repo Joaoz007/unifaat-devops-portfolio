@@ -1,0 +1,15 @@
+{
+  "name": "aula-02-api",
+  "version": "1.0.0",
+  "description": "API Node.js com Express, PostgreSQL e Redis para Aula 02 do portfólio DevOps",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "redis": "^4.7.0"
+  }
+}

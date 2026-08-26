@@ -1,0 +1,19 @@
+# Dependências instaladas localmente (serão recriadas no build)
+node_modules
+
+# Arquivos de variáveis de ambiente locais
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+
+# Metadados de editor
+.vscode
+.idea

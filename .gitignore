@@ -1,8 +1,10 @@
 # Dependências
 node_modules/
 
-# Variáveis de ambiente
+# Variáveis de ambiente (todos os níveis)
 .env
+*/.env
+*/*/.env
 
 # Logs
 *.log
