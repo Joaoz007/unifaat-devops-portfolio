@@ -1,131 +1,297 @@
-# Aula 02 — Análise do Ambiente Docker Compose
+# Análise do Uso de IA — Aula 02 TF
 
-## Visão Geral
+## Prompt Utilizado
 
-Este ambiente demonstra uma stack multi-serviço orquestrada com Docker Compose, composta por uma API Node.js 20, banco de dados PostgreSQL 15 e cache Redis 7. É um padrão amplamente utilizado em aplicações web modernas.
+O seguinte prompt foi utilizado no Kiro para gerar o rascunho inicial do ambiente:
+
+> Crie um ambiente Docker Compose para a Aula 02 do meu portfólio DevOps.
+>
+> O ambiente deve ter:
+> - Uma API Node.js 20 com Express;
+> - PostgreSQL 15 como banco de dados;
+> - Redis 7 como cache;
+> - A API deve rodar na porta 3000;
+> - O PostgreSQL deve usar volume nomeado para persistência;
+> - Todos os serviços devem estar na mesma rede bridge customizada;
+> - Use variáveis de ambiente com interpolação a partir de um arquivo .env;
+> - Adicione healthchecks;
+> - Use depends_on com condition;
+> - Use restart policy unless-stopped.
+>
+> Crie os arquivos necessários dentro da pasta aula-02, incluindo docker-compose.yml, app.js, package.json, Dockerfile, .dockerignore, .env.example e ia-analise.md.
+>
+> Não inclua o arquivo .env no Git.
 
 ---
 
-## Arquitetura dos Serviços
+## Output Original do Kiro
 
+O Kiro gerou inicialmente o seguinte `docker-compose.yml`, antes das validações e ajustes realizados durante o desenvolvimento:
+
+```yaml
+name: aula-02
+
+# ─── Rede customizada ─────────────────────────────────────────────────────────
+
+networks:
+
+  app-network:
+
+    driver: bridge
+
+# ─── Volumes nomeados ─────────────────────────────────────────────────────────
+
+volumes:
+
+  postgres-data:
+
+# ─── Serviços ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 15 ────────────────────────────────────────────────────────────
+
+  postgres:
+
+    image: postgres:15-alpine
+
+    container_name: aula02-postgres
+
+    restart: unless-stopped
+
+    environment:
+
+      POSTGRES_DB:       ${POSTGRES_DB}
+
+      POSTGRES_USER:     ${POSTGRES_USER}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+
+      - postgres-data:/var/lib/postgresql/data
+
+    networks:
+
+      - app-network
+
+    healthcheck:
+
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+
+      interval: 10s
+
+      timeout: 5s
+
+      retries: 5
+
+      start_period: 10s
+
+  # ── Redis 7 ──────────────────────────────────────────────────────────────────
+
+  redis:
+
+    image: redis:7-alpine
+
+    container_name: aula02-redis
+
+    restart: unless-stopped
+
+    networks:
+
+      - app-network
+
+    healthcheck:
+
+      test: ["CMD", "redis-cli", "ping"]
+
+      interval: 10s
+
+      timeout: 5s
+
+      retries: 5
+
+      start_period: 5s
+
+  # ── API Node.js ──────────────────────────────────────────────────────────────
+
+  api:
+
+    build:
+
+      context: ./app
+
+      dockerfile: Dockerfile
+
+    container_name: aula02-api
+
+    restart: unless-stopped
+
+    ports:
+
+      - "${PORT:-3000}:3000"
+
+    environment:
+
+      PORT:              ${PORT:-3000}
+
+      POSTGRES_HOST:     ${POSTGRES_HOST:-postgres}
+
+      POSTGRES_PORT:     ${POSTGRES_PORT:-5432}
+
+      POSTGRES_DB:       ${POSTGRES_DB}
+
+      POSTGRES_USER:     ${POSTGRES_USER}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      REDIS_HOST:        ${REDIS_HOST:-redis}
+
+      REDIS_PORT:        ${REDIS_PORT:-6379}
+
+    networks:
+
+      - app-network
+
+    depends_on:
+
+      postgres:
+
+        condition: service_healthy
+
+      redis:
+
+        condition: service_healthy
+
+    healthcheck:
+
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+
+      interval: 15s
+
+      timeout: 5s
+
+      retries: 3
+
+      start_period: 15s
 ```
-┌─────────────────────────────────────────────────┐
-│                 app-network (bridge)            │
-│                                                 │
-│  ┌──────────┐   ┌──────────┐   ┌────────────┐  │
-│  │   API    │──▶│ Postgres │   │   Redis    │  │
-│  │ :3000    │   │  :5432   │   │   :6379    │  │
-│  └──────────┘   └──────────┘   └────────────┘  │
-│       │                │                        │
-└───────┼────────────────┼────────────────────────┘
-        │                │
-   porta 3000       volume nomeado
-  (host ↔ container)  postgres-data
+
+---
+
+## Alterações e Validações Realizadas Manualmente
+
+O output inicial do Kiro já apresentou uma estrutura bastante próxima dos requisitos técnicos da atividade. Por isso, não foram necessárias grandes alterações estruturais no `docker-compose.yml`.
+
+Durante o desenvolvimento, o projeto foi revisado e validado manualmente para confirmar que a configuração gerada realmente funcionava.
+
+| O que foi revisado/ajustado | Por quê |
+|---|---|
+| Configuração dos serviços API, PostgreSQL e Redis | Garantir que os três serviços exigidos pelo TF estivessem presentes e corretamente orquestrados. |
+| Variáveis de ambiente | Garantir que as configurações sensíveis fossem obtidas através do `.env`, sem deixar as credenciais diretamente no `docker-compose.yml`. |
+| Volume `postgres-data` | Garantir a persistência dos dados do PostgreSQL. |
+| Rede `app-network` | Garantir que os três serviços estivessem conectados pela mesma rede bridge customizada. |
+| Healthchecks | Validar a disponibilidade dos serviços antes da inicialização dependente da API. |
+| `depends_on` com `service_healthy` | Garantir que a API aguardasse PostgreSQL e Redis estarem saudáveis. |
+| `restart: unless-stopped` | Atender ao requisito do trabalho e melhorar a recuperação dos containers após falhas. |
+| Validação com `docker compose config` | Confirmar que o arquivo Compose era válido e que as variáveis estavam sendo interpoladas corretamente. |
+| Testes com Docker Compose | Confirmar o funcionamento real dos três containers, e não apenas a validade da configuração. |
+
+---
+
+## O que o Kiro Acertou
+
+O Kiro conseguiu gerar um rascunho inicial bastante completo e próximo dos requisitos do trabalho.
+
+Entre os principais acertos estão:
+
+- criação dos três serviços necessários;
+- utilização do PostgreSQL 15 Alpine;
+- utilização do Redis 7 Alpine;
+- construção da API a partir de um Dockerfile local;
+- criação de uma rede bridge customizada;
+- utilização de volume nomeado para o PostgreSQL;
+- utilização de variáveis de ambiente com interpolação;
+- configuração de healthchecks;
+- utilização de `depends_on` com condições de saúde;
+- utilização da política de reinicialização `unless-stopped`.
+
+O resultado inicial economizou tempo na criação da estrutura do projeto e serviu como uma base para entender como os serviços deveriam ser organizados.
+
+---
+
+## O que o Kiro Errou ou Omitiu
+
+Apesar de o rascunho ter atendido grande parte dos requisitos, a configuração gerada pela IA não deve ser considerada automaticamente correta apenas por estar sintaticamente válida.
+
+Foi necessário validar manualmente o ambiente e conferir se os serviços realmente iniciavam e se comunicavam corretamente.
+
+Também foi necessário revisar a documentação gerada inicialmente para adequá-la ao formato exigido pelo professor. A primeira versão do `ia-analise.md` apresentava principalmente uma análise técnica da arquitetura, mas não documentava adequadamente o processo de utilização da IA, o prompt utilizado e a comparação entre o output original e o resultado final.
+
+Essa revisão mostrou que a IA pode gerar uma boa base, mas ainda é necessário analisar criticamente o conteúdo produzido.
+
+---
+
+## Validação do Ambiente
+
+Depois da implementação, o ambiente foi validado utilizando Docker Compose.
+
+Foi executado:
+
+```powershell
+docker compose -f aula-02/docker-compose.yml config
 ```
 
----
+O comando confirmou a configuração final do Compose, incluindo os três serviços, rede, volume, healthchecks e dependências.
 
-## Decisões Técnicas
+Também foi verificado o estado dos containers:
 
-### Rede bridge customizada (`app-network`)
-Isola os serviços do ambiente padrão do Docker. Dentro desta rede, os contêineres se resolvem pelo nome do serviço (ex.: `postgres`, `redis`), dispensando IPs fixos.
-
-### Volume nomeado (`postgres-data`)
-Garante que os dados do PostgreSQL sobrevivam a `docker compose down`. Ao contrário de bind mounts, volumes nomeados são gerenciados pelo Docker e portáveis entre ambientes.
-
-### Variáveis de ambiente com `.env`
-O Compose faz interpolação automática de variáveis a partir do arquivo `.env` na mesma pasta do `docker-compose.yml`. O arquivo `.env.example` serve de template e é versionado; o `.env` real fica fora do Git.
-
-### Healthchecks
-| Serviço  | Mecanismo               | Justificativa |
-|----------|-------------------------|---------------|
-| postgres | `pg_isready`            | Verifica se o servidor aceita conexões TCP e autentica o usuário configurado. |
-| redis    | `redis-cli ping`        | Resposta `PONG` confirma que o servidor está operacional. |
-| api      | `GET /health` via wget  | Valida que a aplicação Node.js subiu e está respondendo HTTP. |
-
-### `depends_on` com `condition: service_healthy`
-Impede que a API inicie antes de o PostgreSQL e o Redis estarem de fato prontos para aceitar conexões, eliminando a necessidade de lógica de retry no código da aplicação para a inicialização inicial.
-
-### Restart policy `unless-stopped`
-O Docker reinicia automaticamente o contêiner após falhas ou reinicializações do host, mas respeita paradas manuais (`docker compose stop`). Adequado para ambientes de desenvolvimento e staging.
-
-### Dockerfile multi-stage
-- **Estágio `deps`**: instala somente as dependências de produção (`--omit=dev`), aproveitando o cache de camadas.
-- **Estágio final**: copia apenas o necessário, reduzindo o tamanho da imagem e a superfície de ataque.
-- **Usuário não-root**: segue o princípio do menor privilégio.
-
----
-
-## Cache com Redis
-
-O endpoint `GET /items` armazena o resultado no Redis por **30 segundos**. Operações de escrita (`POST`, `DELETE`) invalidam a chave imediatamente (`DEL items`), garantindo consistência entre o cache e o banco.
-
-```
-Cliente → GET /items
-             │
-             ▼
-       Cache hit? ──sim──▶ retorna { source: "cache", data: [...] }
-             │
-            não
-             │
-             ▼
-     SELECT * FROM items
-             │
-             ▼
-     setEx("items", 30, ...)
-             │
-             ▼
-     retorna { source: "database", data: [...] }
-```
-
----
-
-## Endpoints da API
-
-| Método | Rota         | Descrição                          |
-|--------|--------------|------------------------------------|
-| GET    | `/health`    | Healthcheck — retorna `{ status: "ok" }` |
-| GET    | `/items`     | Lista todos os itens (com cache)   |
-| POST   | `/items`     | Cria um item `{ "name": "..." }`   |
-| DELETE | `/items/:id` | Remove um item pelo ID             |
-
----
-
-## Como Executar
-
-```bash
-# 1. Copie o arquivo de variáveis de ambiente
-cp .env.example .env
-
-# 2. Edite o .env com valores seguros para produção
-# (opcional em desenvolvimento)
-
-# 3. Suba o ambiente
-docker compose up --build -d
-
-# 4. Verifique os serviços
+```powershell
 docker compose ps
-
-# 5. Teste a API
-curl http://localhost:3000/health
-curl http://localhost:3000/items
-curl -X POST http://localhost:3000/items \
-     -H "Content-Type: application/json" \
-     -d '{"name": "primeiro item"}'
-
-# 6. Encerre o ambiente (dados persistem no volume)
-docker compose down
-
-# 7. Encerre e remova os volumes (apaga os dados)
-docker compose down -v
 ```
+
+O ambiente apresentou os seguintes serviços saudáveis:
+
+```text
+aula02-api
+aula02-postgres
+aula02-redis
+```
+
+Também foram realizados testes da API utilizando o endpoint:
+
+```text
+GET /items
+```
+
+Na primeira consulta, os dados foram recuperados do banco:
+
+```json
+{
+  "source": "database"
+}
+```
+
+Na consulta seguinte, os dados foram recuperados do Redis:
+
+```json
+{
+  "source": "cache"
+}
+```
+
+Isso confirmou na prática o funcionamento da integração entre API, PostgreSQL e Redis.
 
 ---
 
-## Melhorias para Produção
+## Minha Avaliação
 
-- Substituir o arquivo `.env` por um gerenciador de segredos (AWS Secrets Manager, HashiCorp Vault).
-- Adicionar um proxy reverso (Nginx ou Traefik) na frente da API.
-- Configurar TLS/HTTPS.
-- Usar réplicas e um orquestrador como Kubernetes para alta disponibilidade.
-- Adicionar observabilidade: métricas (Prometheus), logs estruturados (Loki) e rastreamento (OpenTelemetry).
+- **Tempo economizado usando IA:** aproximadamente 30 minutos.
+- **Tempo gasto validando/corrigindo:** aproximadamente 20 minutos.
+- **Nota para o output da IA:** 8/10.
+- **Usaria novamente para este tipo de tarefa:** Sim.
+
+A IA foi útil principalmente para acelerar a criação da estrutura inicial do ambiente e apresentar uma configuração que já continha grande parte dos requisitos solicitados.
+
+Porém, a experiência também mostrou que o código gerado pela IA precisa ser revisado e testado. Não basta aceitar o resultado automaticamente: é necessário entender a configuração, verificar os requisitos da atividade e executar testes para confirmar que o ambiente realmente funciona.
+
+Eu usaria novamente a IA como copiloto, principalmente para gerar rascunhos, sugerir configurações e acelerar tarefas repetitivas. Entretanto, manteria a validação manual como parte obrigatória do processo.
