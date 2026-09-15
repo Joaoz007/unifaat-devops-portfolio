@@ -1,0 +1,20 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variáveis sensíveis
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example
+
+# Credenciais e chaves
+*.pem
+aws-creds.sh
+technova-key
+technova-key.pub
+
+# Arquivos locais
+.DS_Store
