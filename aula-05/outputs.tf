@@ -30,10 +30,10 @@ output "rds_database" {
 
 output "s3_state_bucket" {
   description = "Bucket S3 utilizado pelo Remote State"
-  value       = "technova-terraform-state-6325175"
+  value       = "technova-terraform-state-6325175-2026"
 }
 
 output "dynamodb_lock_table" {
-  description = "Tabela DynamoDB utilizada para locking"
-  value       = aws_dynamodb_table.terraform_lock.name
+  description = "Tabela DynamoDB utilizada para locking do Terraform State"
+  value       = "technova-terraform-lock-6325175-2026"
 }
