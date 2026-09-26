@@ -1,0 +1,10 @@
+﻿# Arquivos gerados pelo Terraform - nao versionar
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Credenciais AWS do Learner Lab - NUNCA versionar
+.aws-credentials
