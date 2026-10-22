@@ -74,12 +74,31 @@ function localChecks(diff) {
     .filter(line => {
       const trimmed = line.trim();
 
-      return (
-        trimmed.length > 0 &&
-        !trimmed.startsWith("//") &&
-        !trimmed.startsWith("*") &&
-        !trimmed.startsWith("/*")
-      );
+      if (
+        trimmed.startsWith("pattern:") ||
+        trimmed.startsWith("title:") ||
+        trimmed.startsWith("recommendation:")
+      ) {
+        return false;
+      }
+
+      if (
+        trimmed.length === 0 ||
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("*") ||
+        trimmed.startsWith("/*")
+      ) {
+        return false;
+      }
+
+      if (
+        trimmed.includes('title: "Uso de eval()"') ||
+        trimmed.includes('title: "console.log() no código alterado"')
+      ) {
+        return false;
+      }
+
+      return true;
     });
 
   for (const check of checks) {
