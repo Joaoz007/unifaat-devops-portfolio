@@ -1,0 +1,13 @@
+﻿{
+  "name": "aula-09-technova-api",
+  "version": "1.0.0",
+  "description": "API independente para demonstrar Docker, Amazon ECR e CI/CD com revisão de código por IA",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
