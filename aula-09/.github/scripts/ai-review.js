@@ -18,11 +18,22 @@ async function github(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub API: ${response.status} ${await response.text()}`);
+    throw new Error(
+      `GitHub API: ${response.status} ${await response.text()}`
+    );
   }
 
   if (response.status === 204) return null;
   return response.json();
+}
+
+function isReviewerFile(filename) {
+  const normalized = filename.replace(/\\/g, "/").replace(/^\.?\//, "");
+
+  return (
+    normalized === "aula-09/.github/scripts/ai-review.js" ||
+    normalized === ".github/scripts/ai-review.js"
+  );
 }
 
 function localChecks(diff) {
@@ -34,44 +45,47 @@ function localChecks(diff) {
       severity: "CRITICAL",
       pattern: /\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*["'][^"'\n]{8,}["']/i,
       title: "Possível segredo hardcoded",
-      recommendation: "Remova a credencial do código e utilize secrets ou variáveis de ambiente."
+      recommendation:
+        "Remova a credencial do código e utilize secrets ou variáveis de ambiente."
     },
     {
       id: "EVAL_USAGE",
       severity: "CRITICAL",
       pattern: /\beval\s*\(/,
       title: "Uso de eval()",
-      recommendation: "Evite eval(); utilize alternativas que não executem strings como código."
+      recommendation:
+        "Evite eval(); utilize alternativas que não executem strings como código."
     },
     {
       id: "SQL_INJECTION",
       severity: "CRITICAL",
       pattern: /\b(?:query|execute)\s*\(\s*["'`][^"'`]*(?:\$\{|["']\s*\+|\+\s*[a-z_$])/i,
       title: "Possível SQL Injection",
-      recommendation: "Utilize consultas parametrizadas em vez de concatenar entradas na SQL."
+      recommendation:
+        "Utilize consultas parametrizadas em vez de concatenar entradas na SQL."
     },
     {
       id: "CONSOLE_LOG",
       severity: "WARNING",
       pattern: /\bconsole\.log\s*\(/,
       title: "console.log() no código alterado",
-      recommendation: "Remova logs de depuração ou utilize logging adequado sem dados sensíveis."
+      recommendation:
+        "Remova logs de depuração ou utilize logging adequado sem dados sensíveis."
     },
     {
       id: "EMPTY_CATCH",
       severity: "WARNING",
       pattern: /\bcatch\s*(?:\([^)]*\)\s*)?\{\s*\}/,
       title: "Bloco catch vazio",
-      recommendation: "Trate o erro explicitamente ou registre-o de forma segura."
+      recommendation:
+        "Trate o erro explicitamente ou registre-o de forma segura."
     }
   ];
 
   const codeExtensions = new Set([
     ".js", ".cjs", ".mjs", ".jsx",
-    ".ts", ".tsx",
-    ".py", ".sh",
-    ".java", ".go", ".php",
-    ".rb", ".sql"
+    ".ts", ".tsx", ".py", ".sh",
+    ".java", ".go", ".php", ".rb", ".sql"
   ]);
 
   const sections = diff.split(/(?=FILE: )/);
@@ -83,18 +97,15 @@ function localChecks(diff) {
     const filename = section.slice(6, firstNewline).trim();
     const patch = section.slice(firstNewline + 1);
 
-    // Não analisa o próprio revisor nem arquivos de documentação.
-    if (
-      filename === "aula-09/.github/scripts/ai-review.js" ||
-      filename === ".github/scripts/ai-review.js"
-    ) {
-      continue;
-    }
+    // Nunca analisa o próprio revisor.
+    if (isReviewerFile(filename)) continue;
 
     const filenameLower = filename.toLowerCase();
     const extensionIndex = filenameLower.lastIndexOf(".");
     const extension =
-      extensionIndex >= 0 ? filenameLower.slice(extensionIndex) : "";
+      extensionIndex >= 0
+        ? filenameLower.slice(extensionIndex)
+        : "";
 
     if (!codeExtensions.has(extension)) continue;
 
@@ -106,7 +117,8 @@ function localChecks(diff) {
         line.length > 0 &&
         !line.startsWith("//") &&
         !line.startsWith("/*") &&
-        !line.startsWith("*")
+        !line.startsWith("*") &&
+        !line.startsWith("#")
       );
 
     for (const check of checks) {
@@ -143,13 +155,15 @@ function parseFindings(content) {
   const allowed = new Set(["CRITICAL", "WARNING", "INFO"]);
 
   return parsed.findings
-    .filter(item => allowed.has(item.severity))
+    .filter(item => item && allowed.has(item.severity))
     .map(item => ({
       id: String(item.id || "AI_REVIEW"),
       severity: item.severity,
       title: String(item.title || "Achado da revisão"),
       evidence: String(item.evidence || "Sem trecho específico").slice(0, 300),
-      recommendation: String(item.recommendation || "Revisar manualmente."),
+      recommendation: String(
+        item.recommendation || "Revisar manualmente."
+      ),
       source: "Revisão por IA"
     }));
 }
@@ -158,15 +172,23 @@ function formatComment(findings, aiStatus) {
   const counts = { CRITICAL: 0, WARNING: 0, INFO: 0 };
 
   for (const item of findings) {
-    counts[item.severity]++;
+    if (Object.hasOwn(counts, item.severity)) {
+      counts[item.severity]++;
+    }
   }
+
+  const blocked = counts.CRITICAL > 0;
 
   const lines = [
     "## 🤖 Revisão automatizada de código — Aula 09",
     "",
     `**Status da IA:** ${aiStatus}`,
     "",
-    `**Resultado:** ${counts.CRITICAL ? "❌ Bloqueado por achados críticos" : "✅ Nenhum achado crítico"}`,
+    `**Resultado:** ${
+      blocked
+        ? "❌ Bloqueado por achados críticos"
+        : "✅ Nenhum achado crítico"
+    }`,
     "",
     `- 🔴 CRITICAL: ${counts.CRITICAL}`,
     `- 🟠 WARNING: ${counts.WARNING}`,
@@ -180,11 +202,15 @@ function formatComment(findings, aiStatus) {
   }
 
   for (const item of findings) {
+    const safeEvidence = item.evidence
+      .replace(/`/g, "'")
+      .replace(/\r?\n/g, " ");
+
     lines.push(
       "",
       `### ${item.severity}: ${item.title}`,
       `- **Identificador:** \`${item.id}\``,
-      `- **Evidência:** \`${item.evidence.replace(/`/g, "'")}\``,
+      `- **Evidência:** \`${safeEvidence}\``,
       `- **Recomendação:** ${item.recommendation}`,
       `- **Origem:** ${item.source}`
     );
@@ -192,7 +218,7 @@ function formatComment(findings, aiStatus) {
 
   lines.push(
     "",
-    counts.CRITICAL
+    blocked
       ? "**Quality gate reprovado:** corrija os achados críticos antes de integrar as alterações."
       : "**Quality gate aprovado:** não foram encontrados achados críticos."
   );
@@ -220,13 +246,18 @@ async function main() {
       `/repos/${owner}/${repo}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}`
     );
 
+    if (!Array.isArray(batch)) {
+      throw new Error("A API do GitHub não retornou uma lista de arquivos.");
+    }
+
     files.push(...batch);
 
     if (batch.length < 100) break;
   }
 
+  // Exclui o próprio revisor antes de montar o diff.
   const diff = files
-    .filter(file => file.patch)
+    .filter(file => file.patch && !isReviewerFile(file.filename))
     .map(file => `FILE: ${file.filename}\n${file.patch}`)
     .join("\n\n")
     .slice(0, 60000);
@@ -283,17 +314,25 @@ async function main() {
             "IA indisponível: limite ou créditos da API esgotados. Aplicadas as verificações locais.";
           console.warn(aiStatus);
         } else {
-          throw new Error(`OpenAI API: ${response.status} ${errorText}`);
+          throw new Error(
+            `OpenAI API: ${response.status} ${errorText}`
+          );
         }
       } else {
         const result = await response.json();
-        aiFindings = parseFindings(result.choices[0].message.content);
+        aiFindings = parseFindings(
+          result.choices?.[0]?.message?.content || ""
+        );
         aiStatus = "Revisão por IA executada com sucesso.";
       }
     } catch (error) {
-      if (error.message.startsWith("OpenAI API: 429")) {
+      if (
+        error.message.startsWith("OpenAI API: 429") ||
+        error.message.includes("insufficient_quota") ||
+        error.message.includes("credit_balance_exhausted")
+      ) {
         aiStatus =
-          "IA indisponível por limite de uso. Aplicadas as verificações locais.";
+          "IA indisponível por limite ou créditos. Aplicadas as verificações locais.";
         console.warn(aiStatus);
       } else {
         throw error;
@@ -301,6 +340,7 @@ async function main() {
     }
   }
 
+  // Remove duplicados mantendo a primeira ocorrência.
   const seen = new Set();
 
   const findings = [...ruleFindings, ...aiFindings].filter(item => {
@@ -324,15 +364,21 @@ async function main() {
   );
 
   if (previous) {
-    await github(`/repos/${owner}/${repo}/issues/comments/${previous.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ body: comment })
-    });
+    await github(
+      `/repos/${owner}/${repo}/issues/comments/${previous.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ body: comment })
+      }
+    );
   } else {
-    await github(`/repos/${owner}/${repo}/issues/${PR_NUMBER}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body: comment })
-    });
+    await github(
+      `/repos/${owner}/${repo}/issues/${PR_NUMBER}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body: comment })
+      }
+    );
   }
 
   console.log(`Revisão concluída: ${findings.length} achado(s).`);
@@ -340,6 +386,8 @@ async function main() {
   if (findings.some(item => item.severity === "CRITICAL")) {
     console.error("Quality gate reprovado: existem achados CRITICAL.");
     process.exitCode = 1;
+  } else {
+    console.log("Quality gate aprovado: nenhum achado CRITICAL.");
   }
 }
 
