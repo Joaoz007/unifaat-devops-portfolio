@@ -25,7 +25,6 @@ async function github(path, options = {}) {
   return response.json();
 }
 
-
 function localChecks(diff) {
   const findings = [];
 
@@ -67,52 +66,62 @@ function localChecks(diff) {
     }
   ];
 
-  const addedLines = diff
-    .split("\n")
-    .filter(line => line.startsWith("+") && !line.startsWith("+++"))
-    .map(line => line.slice(1))
-    .filter(line => {
-      const trimmed = line.trim();
+  const codeExtensions = new Set([
+    ".js", ".cjs", ".mjs", ".jsx",
+    ".ts", ".tsx",
+    ".py", ".sh",
+    ".java", ".go", ".php",
+    ".rb", ".sql"
+  ]);
 
-      if (
-        trimmed.startsWith("pattern:") ||
-        trimmed.startsWith("title:") ||
-        trimmed.startsWith("recommendation:")
-      ) {
-        return false;
+  const sections = diff.split(/(?=FILE: )/);
+
+  for (const section of sections) {
+    const firstNewline = section.indexOf("\n");
+    if (firstNewline === -1) continue;
+
+    const filename = section.slice(6, firstNewline).trim();
+    const patch = section.slice(firstNewline + 1);
+
+    // Não analisa o próprio revisor nem arquivos de documentação.
+    if (
+      filename === "aula-09/.github/scripts/ai-review.js" ||
+      filename === ".github/scripts/ai-review.js"
+    ) {
+      continue;
+    }
+
+    const filenameLower = filename.toLowerCase();
+    const extensionIndex = filenameLower.lastIndexOf(".");
+    const extension =
+      extensionIndex >= 0 ? filenameLower.slice(extensionIndex) : "";
+
+    if (!codeExtensions.has(extension)) continue;
+
+    const addedLines = patch
+      .split("\n")
+      .filter(line => line.startsWith("+") && !line.startsWith("+++"))
+      .map(line => line.slice(1).trim())
+      .filter(line =>
+        line.length > 0 &&
+        !line.startsWith("//") &&
+        !line.startsWith("/*") &&
+        !line.startsWith("*")
+      );
+
+    for (const check of checks) {
+      const matchingLine = addedLines.find(line => check.pattern.test(line));
+
+      if (matchingLine) {
+        findings.push({
+          id: check.id,
+          severity: check.severity,
+          title: check.title,
+          evidence: `${filename}: ${matchingLine.slice(0, 150)}`,
+          recommendation: check.recommendation,
+          source: "Verificação automática por regras"
+        });
       }
-
-      if (
-        trimmed.length === 0 ||
-        trimmed.startsWith("//") ||
-        trimmed.startsWith("*") ||
-        trimmed.startsWith("/*")
-      ) {
-        return false;
-      }
-
-      if (
-        trimmed.includes('title: "Uso de eval()"') ||
-        trimmed.includes('title: "console.log() no código alterado"')
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-
-  for (const check of checks) {
-    const matchingLine = addedLines.find(line => check.pattern.test(line));
-
-    if (matchingLine) {
-      findings.push({
-        id: check.id,
-        severity: check.severity,
-        title: check.title,
-        evidence: matchingLine.trim().slice(0, 180),
-        recommendation: check.recommendation,
-        source: "Verificação automática por regras"
-      });
     }
   }
 
