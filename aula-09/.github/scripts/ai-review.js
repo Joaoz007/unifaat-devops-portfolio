@@ -25,6 +25,7 @@ async function github(path, options = {}) {
   return response.json();
 }
 
+
 function localChecks(diff) {
   const findings = [];
 
@@ -32,7 +33,7 @@ function localChecks(diff) {
     {
       id: "HARDCODED_SECRET",
       severity: "CRITICAL",
-      pattern: /(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*["'][^"'\n]{8,}["']/i,
+      pattern: /\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*["'][^"'\n]{8,}["']/i,
       title: "Possível segredo hardcoded",
       recommendation: "Remova a credencial do código e utilize secrets ou variáveis de ambiente."
     },
@@ -46,7 +47,7 @@ function localChecks(diff) {
     {
       id: "SQL_INJECTION",
       severity: "CRITICAL",
-      pattern: /(?:query|execute)\s*\(\s*["'`][^"'`]*(?:\$\{|["']\s*\+|\+\s*[a-z_$])/i,
+      pattern: /\b(?:query|execute)\s*\(\s*["'`][^"'`]*(?:\$\{|["']\s*\+|\+\s*[a-z_$])/i,
       title: "Possível SQL Injection",
       recommendation: "Utilize consultas parametrizadas em vez de concatenar entradas na SQL."
     },
@@ -60,7 +61,7 @@ function localChecks(diff) {
     {
       id: "EMPTY_CATCH",
       severity: "WARNING",
-      pattern: /catch\s*(?:\([^)]*\)\s*)?\{\s*\}/,
+      pattern: /\bcatch\s*(?:\([^)]*\)\s*)?\{\s*\}/,
       title: "Bloco catch vazio",
       recommendation: "Trate o erro explicitamente ou registre-o de forma segura."
     }
@@ -69,7 +70,17 @@ function localChecks(diff) {
   const addedLines = diff
     .split("\n")
     .filter(line => line.startsWith("+") && !line.startsWith("+++"))
-    .map(line => line.slice(1));
+    .map(line => line.slice(1))
+    .filter(line => {
+      const trimmed = line.trim();
+
+      return (
+        trimmed.length > 0 &&
+        !trimmed.startsWith("//") &&
+        !trimmed.startsWith("*") &&
+        !trimmed.startsWith("/*")
+      );
+    });
 
   for (const check of checks) {
     const matchingLine = addedLines.find(line => check.pattern.test(line));
@@ -79,7 +90,7 @@ function localChecks(diff) {
         id: check.id,
         severity: check.severity,
         title: check.title,
-        evidence: matchingLine.slice(0, 180),
+        evidence: matchingLine.trim().slice(0, 180),
         recommendation: check.recommendation,
         source: "Verificação automática por regras"
       });
